@@ -32,14 +32,36 @@ function flatUnique(arr: string[]) {
   );
 }
 
-const indexed = data.map((row) => ({
-  ...row,
-  index: unique([
-    ...(row.keywords ?? []),
-    ...(row.characters ?? []),
-    row.title,
-  ]),
-}));
+function search(rs: RegExp[], data: Row[]): Row[] {
+  type Ranked = {
+    row: Row;
+    hasTitle: boolean;
+    hasKeyword: boolean;
+    hasCharacter: boolean;
+    score: number;
+  };
+  const ranked: Ranked[] = [];
+  for (const row of data) {
+    ranked.push({
+      row,
+      hasTitle: rs.every((r) => r.test(row.title)),
+      hasKeyword: rs.every((r) => (row.keywords ?? []).some((e) => r.test(e))),
+      hasCharacter: rs.every((r) =>
+        (row.characters ?? []).some((e) => r.test(e))
+      ),
+      score: 0,
+    });
+  }
+  ranked.forEach((r) => {
+    r.score =
+      (r.hasTitle ? 8 : 0) + (r.hasCharacter ? 4 : 0) + (r.hasKeyword ? 2 : 0);
+  });
+  return ranked
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((r) => r.row);
+}
+
 const allKeywords = flatUnique(
   data.flatMap((row) => [...(row.keywords ?? []), ...(row.characters ?? [])])
 );
@@ -54,9 +76,7 @@ function App() {
       .map((e) => createFuzzyMatcher(e));
   }, [keyword]);
   const result = useMemo(() => {
-    return indexed.filter((row) =>
-      rs.every((r) => row.index.some((e) => r.test(e)))
-    );
+    return search(rs, data);
   }, [rs]);
   const suggestion = useMemo(() => {
     return allKeywords.filter((e) => rs.every((r) => r.test(e)));
@@ -83,7 +103,7 @@ function App() {
         </SimpleGrid>
       </MediaQuery>
       <MediaQuery query="(min-width: 36em)" styles={{ display: "none" }}>
-        <List spacing="xl">
+        <List spacing="sm">
           {result.map((row) => (
             <ResultListItem row={row} />
           ))}
@@ -108,11 +128,17 @@ function SearchTextBox({
 
   return (
     <Autocomplete
-      label="🧒🪄 키워드를 입력하세요"
+      label={
+        <Text size="xl" mb={8}>
+          🧒🪄 키워드를 입력하세요
+        </Text>
+      }
+      placeholder="'에디 우주'와 같이 검색해보세요!"
       value={value}
       size="xl"
+      mb={12}
       onChange={setValue}
-      data={suggestion}
+      data={suggestion.includes(keyword) ? [] : suggestion}
     />
   );
 }
